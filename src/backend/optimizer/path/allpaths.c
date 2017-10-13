@@ -110,7 +110,7 @@ static void set_values_pathlist(PlannerInfo *root, RelOptInfo *rel,
 					RangeTblEntry *rte);
 static void set_tablefunc_pathlist(PlannerInfo *root, RelOptInfo *rel,
 					   RangeTblEntry *rte);
-static void set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel,
+static CommonTableExpr *set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel,
 				 RangeTblEntry *rte);
 static void set_namedtuplestore_pathlist(PlannerInfo *root, RelOptInfo *rel,
 							 RangeTblEntry *rte);
@@ -394,10 +394,21 @@ set_rel_size(PlannerInfo *root, RelOptInfo *rel,
 				 * and unparameterized paths, so just go ahead and build their
 				 * paths immediately.
 				 */
-				if (rte->self_reference)
+				if (rte->self_reference) {
 					set_worktable_pathlist(root, rel, rte);
-				else
-					set_cte_pathlist(root, rel, rte);
+					/* TODO: deferrable CTEs */
+				} else {
+					CommonTableExpr *cte = set_cte_pathlist(root, rel, rte);
+					if (cte->ctedeferrable) {
+						ParseState *pstate = make_parsestate(NULL);
+						RangeTblEntry *rte = addRangeTableEntryForSubquery(
+							pstate, cte->ctequery, 
+							makeAlias("*CTE*", NIL),
+							false,
+							false);
+						set_subquery_pathlist(root, rel, rti, rte);
+					}
+				}
 				break;
 			case RTE_NAMEDTUPLESTORE:
 				set_namedtuplestore_pathlist(root, rel, rte);
@@ -2131,7 +2142,7 @@ set_tablefunc_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
  * There's no need for a separate set_cte_size phase, since we don't
  * support join-qual-parameterized paths for CTEs.
  */
-static void
+static CommonTableExpr *
 set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 {
 	Plan	   *cteplan;
@@ -2188,6 +2199,8 @@ set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 	/* Generate appropriate path */
 	add_path(rel, create_ctescan_path(root, rel, required_outer));
+
+	return (CommonTableExpr *) lfirst(lc);
 }
 
 /*

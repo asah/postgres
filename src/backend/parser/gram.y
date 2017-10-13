@@ -11023,24 +11023,13 @@ cte_list:
 
 common_table_expr:  name opt_name_list AS opt_deferrable '(' PreparableStmt ')'
 			{
-				if ($4) {
-					ViewStmt *n = makeNode(ViewStmt);
-					n->view = makeRangeVar(NULL, $1, @1);  /* TODO: name conflicts? */
-					n->view->relpersistence = false;  /* TODO: does relpersistence provide the correct scoping? */
-					n->aliases = NIL;  /* opt_name_list? */
-					n->query = $6;   /* TODO: only accept SelectStmt? */
-					n->replace = true;  /* TODO: name conflicts? */
-					n->options = NIL;
-					n->withCheckOption = false;
-					$$ = (Node *) n;
-				} else {
-					CommonTableExpr *n = makeNode(CommonTableExpr);
-					n->ctename = $1;
-					n->aliascolnames = $2;
-					n->ctequery = $6;
-					n->location = @1;
-					$$ = (Node *) n;
-				}
+				CommonTableExpr *n = makeNode(CommonTableExpr);
+				n->ctename = $1;
+				n->aliascolnames = $2;
+				n->ctedeferrable = $4;
+				n->ctequery = $6;
+				n->location = @1;
+				$$ = (Node *) n;
 			}
 		;
 

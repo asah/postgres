@@ -148,6 +148,7 @@ transformWithClause(ParseState *pstate, WithClause *withClause)
 		}
 	}
 
+	/* TODO: handle WITH RECURSIVE */
 	if (withClause->recursive)
 	{
 		/*

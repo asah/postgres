@@ -1031,3 +1031,6 @@ with ordinality as (select 1 as x) select * from ordinality;
 
 -- check sane response to attempt to modify CTE relation
 WITH d AS (SELECT 42) INSERT INTO d VALUES (1);
+
+-- deferrable CTEs
+WITH d AS DEFERRABLE (SELECT 42) select * from d;
