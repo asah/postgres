@@ -306,7 +306,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 
 %type <ival>	opt_lock lock_type cast_context
 %type <ival>	vacuum_option_list vacuum_option_elem
-%type <boolean>	opt_or_replace
+%type <boolean>	opt_or_replace opt_deferrable
 				opt_grant_grant_option opt_grant_admin_option
 				opt_nowait opt_if_exists opt_with_data
 %type <ival>	opt_nowait_or_skip
@@ -11021,15 +11021,33 @@ cte_list:
 		| cte_list ',' common_table_expr		{ $$ = lappend($1, $3); }
 		;
 
-common_table_expr:  name opt_name_list AS '(' PreparableStmt ')'
+common_table_expr:  name opt_name_list AS opt_deferrable '(' PreparableStmt ')'
 			{
-				CommonTableExpr *n = makeNode(CommonTableExpr);
-				n->ctename = $1;
-				n->aliascolnames = $2;
-				n->ctequery = $5;
-				n->location = @1;
-				$$ = (Node *) n;
+				if ($4) {
+					ViewStmt *n = makeNode(ViewStmt);
+					n->view = makeRangeVar(NULL, $1, @1);  /* TODO: name conflicts? */
+					n->view->relpersistence = false;  /* TODO: does relpersistence provide the correct scoping? */
+					n->aliases = NIL;  /* opt_name_list? */
+					n->query = $6;   /* TODO: only accept SelectStmt? */
+					n->replace = true;  /* TODO: name conflicts? */
+					n->options = NIL;
+					n->withCheckOption = false;
+					$$ = (Node *) n;
+				} else {
+					CommonTableExpr *n = makeNode(CommonTableExpr);
+					n->ctename = $1;
+					n->aliascolnames = $2;
+					n->ctequery = $6;
+					n->location = @1;
+					$$ = (Node *) n;
+				}
 			}
+		;
+
+opt_deferrable:
+        DEFERRABLE                              { $$ = true; }
+        | NOT DEFERRABLE                        { $$ = false; }
+        | /*EMPTY*/                             { $$ = false; }
 		;
 
 opt_with_clause:
