@@ -42,6 +42,7 @@
 #include "optimizer/tlist.h"
 #include "optimizer/var.h"
 #include "parser/parse_clause.h"
+#include "parser/parse_relation.h"
 #include "parser/parsetree.h"
 #include "rewrite/rewriteManip.h"
 #include "utils/lsyscache.h"
@@ -399,14 +400,29 @@ set_rel_size(PlannerInfo *root, RelOptInfo *rel,
 					/* TODO: deferrable CTEs */
 				} else {
 					CommonTableExpr *cte = set_cte_pathlist(root, rel, rte);
-					if (cte->ctedeferrable) {
+					/* returns non-null if we NOT MATERIALIZED - rewrite as subquery */
+					if (cte != NULL) {
+						/* TODO: ideal if we provided BOTH the CTE and subquery plans,
+						   and the optimizer could choose... */
+						elog(INFO, "cte!=NULL");
 						ParseState *pstate = make_parsestate(NULL);
+
+						elog(INFO, "make_parsestate");
 						RangeTblEntry *rte = addRangeTableEntryForSubquery(
-							pstate, cte->ctequery, 
+							pstate, (Query *) cte->ctequery, 
 							makeAlias("*CTE*", NIL),
 							false,
 							false);
+						elog(INFO, "addRangeTableEntryForSubquery");
+						/* copyObject not supported for RelOptInfo bec of circularity */
+/* asah 						RelOptInfo *rel2 = makeNode(RelOptInfo); asah */
+/* asah 						*rel2 = *rel; asah */
+						rel->rtekind = RTE_SUBQUERY;
+						elog(INFO, "set rtekind");
+						planner_rt_fetch(rel->relid, root)->rtekind = RTE_SUBQUERY;
+						elog(INFO, "set planner rtekind");
 						set_subquery_pathlist(root, rel, rti, rte);
+						elog(INFO, "set_subquery_pathlist(root, rel, rti, rte);");
 					}
 				}
 				break;
@@ -2152,6 +2168,7 @@ set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	ListCell   *lc;
 	int			plan_id;
 	Relids		required_outer;
+	CommonTableExpr *cte;
 
 	/*
 	 * Find the referenced CTE, and locate the plan previously made for it.
@@ -2173,8 +2190,7 @@ set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	ndx = 0;
 	foreach(lc, cteroot->parse->cteList)
 	{
-		CommonTableExpr *cte = (CommonTableExpr *) lfirst(lc);
-
+		cte = (CommonTableExpr *) lfirst(lc);
 		if (strcmp(cte->ctename, rte->ctename) == 0)
 			break;
 		ndx++;
@@ -2183,6 +2199,11 @@ set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 		elog(ERROR, "could not find CTE \"%s\"", rte->ctename);
 	if (ndx >= list_length(cteroot->cte_plan_ids))
 		elog(ERROR, "could not find plan for CTE \"%s\"", rte->ctename);
+	if (!cte->ctematerialized) {
+		elog(INFO, "!cte->ctematerialized: using subquery path...");
+		return cte;
+	}		
+	elog(INFO, "cte->ctematerialized: using CTE path...");
 	plan_id = list_nth_int(cteroot->cte_plan_ids, ndx);
 	Assert(plan_id > 0);
 	cteplan = (Plan *) list_nth(root->glob->subplans, plan_id - 1);
@@ -2200,7 +2221,7 @@ set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	/* Generate appropriate path */
 	add_path(rel, create_ctescan_path(root, rel, required_outer));
 
-	return (CommonTableExpr *) lfirst(lc);
+	return NULL;
 }
 
 /*

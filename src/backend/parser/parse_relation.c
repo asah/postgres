@@ -1345,7 +1345,9 @@ addRangeTableEntryForSubquery(ParseState *pstate,
 	rte->subquery = subquery;
 	rte->alias = alias;
 
+	elog(INFO, "copy alias");
 	eref = copyObject(alias);
+	elog(INFO, "list_length");
 	numaliases = list_length(eref->colnames);
 
 	/* fill in any unspecified alias columns */
@@ -1393,6 +1395,7 @@ addRangeTableEntryForSubquery(ParseState *pstate,
 	 * Add completed RTE to pstate's range table list, but not to join list
 	 * nor namespace --- caller must do that if appropriate.
 	 */
+	elog(INFO, "lappend");
 	pstate->p_rtable = lappend(pstate->p_rtable, rte);
 
 	return rte;

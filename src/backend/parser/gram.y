@@ -306,7 +306,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 
 %type <ival>	opt_lock lock_type cast_context
 %type <ival>	vacuum_option_list vacuum_option_elem
-%type <boolean>	opt_or_replace opt_deferrable
+%type <boolean>	opt_or_replace opt_materialized
 				opt_grant_grant_option opt_grant_admin_option
 				opt_nowait opt_if_exists opt_with_data
 %type <ival>	opt_nowait_or_skip
@@ -11021,22 +11021,23 @@ cte_list:
 		| cte_list ',' common_table_expr		{ $$ = lappend($1, $3); }
 		;
 
-common_table_expr:  name opt_name_list AS opt_deferrable '(' PreparableStmt ')'
+common_table_expr:  name opt_name_list AS opt_materialized '(' PreparableStmt ')'
 			{
 				CommonTableExpr *n = makeNode(CommonTableExpr);
 				n->ctename = $1;
 				n->aliascolnames = $2;
-				n->ctedeferrable = $4;
+				n->ctematerialized = $4;
+				elog(INFO, $4 ? "n->ctematerialized = true" : "n->ctematerialized = false");
 				n->ctequery = $6;
 				n->location = @1;
 				$$ = (Node *) n;
 			}
 		;
 
-opt_deferrable:
-        DEFERRABLE                              { $$ = true; }
-        | NOT DEFERRABLE                        { $$ = false; }
-        | /*EMPTY*/                             { $$ = false; }
+opt_materialized:
+        MATERIALIZED                            { $$ = true; }
+        | NOT MATERIALIZED                      { $$ = false; }
+        | /*EMPTY*/                             { $$ = true; }
 		;
 
 opt_with_clause:
